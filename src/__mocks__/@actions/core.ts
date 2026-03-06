@@ -1,9 +1,1 @@
-export const getInput = () => '';
-export const getBooleanInput = () => false;
-export const getMultilineInput = () => [];
-export const startGroup = () => {};
-export const debug = () => {};
-export const endGroup = () => {};
-export const notice = () => {};
-export const warning = () => {};
-export const setFailed = () => {};
+export {};

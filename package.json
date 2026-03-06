@@ -41,6 +41,7 @@
       "^.+\\.ts$": ["ts-jest", { "useESM": true }]
     },
     "moduleNameMapper": {
+      "^@actions/core$": "<rootDir>/src/__mocks__/@actions/core.ts",
       "^@octokit/rest$": "<rootDir>/src/__mocks__/@octokit/rest.ts"
     }
   }
