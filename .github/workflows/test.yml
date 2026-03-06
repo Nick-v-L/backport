@@ -1,0 +1,23 @@
+name: Test Action
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-action:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test Backport Action in Dry Run
+        uses: ./
+        with:
+          input-method: label
+          custom-input: v1.0,v2.0
+          target-branch-pattern: |
+            release/*
+          dry-run: true

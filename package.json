@@ -1,0 +1,47 @@
+{
+  "name": "backport",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nick-v-L/backport.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Nick-v-L/backport/issues"
+  },
+  "homepage": "https://github.com/Nick-v-L/backport#readme",
+  "dependencies": {
+    "@actions/core": "^3.0.0",
+    "@actions/github": "^9.0.0",
+    "@octokit/rest": "^22.0.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.3.0",
+    "@vercel/ncc": "^0.38.4",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.9.3"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testPathIgnorePatterns": ["<rootDir>/dist/"],
+    "extensionsToTreatAsEsm": [".ts"],
+    "transform": {
+      "^.+\\.ts$": ["ts-jest", { "useESM": true }]
+    },
+    "moduleNameMapper": {
+      "^@octokit/rest$": "<rootDir>/src/__mocks__/@octokit/rest.ts"
+    }
+  }
+}

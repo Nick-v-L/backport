@@ -1,0 +1,14 @@
+name: Backport
+description: Backport pull request to a specified branch based on labels, comments or anything else you can think of.
+
+inputs:
+  github-token:
+    default: ${{ github.token }}
+
+runs:
+  using: node24
+  main: dist/index.js
+
+branding:
+  icon: "git-branch"
+  color: "green"
