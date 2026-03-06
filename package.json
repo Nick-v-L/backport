@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && ncc build dist/index.js -m -e @actions/core -e @actions/github -o dist",
     "prepare": "npm run build",
     "test": "jest"
   },
