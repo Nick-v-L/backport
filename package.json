@@ -1,12 +1,10 @@
 {
   "name": "backport",
   "version": "1.0.0",
-  "description": "",
+  "description": "This action prints \"Hello World\" or \"Hello\" + the name of a person to greet to the log.",
   "main": "index.js",
   "scripts": {
-    "build": "tsc && ncc build dist/index.js -m -e @actions/core -e @actions/github -o dist",
-    "prepare": "npm run build",
-    "test": "jest"
+    "build": "rollup --config rollup.config.mjs"
   },
   "repository": {
     "type": "git",
@@ -22,27 +20,11 @@
   "homepage": "https://github.com/Nick-v-L/backport#readme",
   "dependencies": {
     "@actions/core": "^3.0.0",
-    "@actions/github": "^9.0.0",
-    "@octokit/rest": "^22.0.1"
+    "@actions/github": "^9.0.0"
   },
   "devDependencies": {
-    "@types/jest": "^30.0.0",
-    "@types/node": "^25.3.0",
-    "@vercel/ncc": "^0.38.4",
-    "jest": "^30.2.0",
-    "ts-jest": "^29.4.6",
-    "typescript": "^5.9.3"
-  },
-  "jest": {
-    "testEnvironment": "node",
-    "testPathIgnorePatterns": ["<rootDir>/dist/"],
-    "extensionsToTreatAsEsm": [".ts"],
-    "transform": {
-      "^.+\\.ts$": ["ts-jest", { "useESM": true }]
-    },
-    "moduleNameMapper": {
-      "^@actions/core$": "<rootDir>/src/__mocks__/@actions/core.ts",
-      "^@octokit/rest$": "<rootDir>/src/__mocks__/@octokit/rest.ts"
-    }
+    "@rollup/plugin-commonjs": "^29.0.2",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "rollup": "^4.60.0"
   }
 }
