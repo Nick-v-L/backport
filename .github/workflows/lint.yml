@@ -1,0 +1,16 @@
+name: Lint
+
+on:
+  push:
+
+jobs:
+  action-lint:
+    name: Action lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: actionlint
+        uses: raven-actions/actionlint@v2

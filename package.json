@@ -1,23 +1,35 @@
 {
   "name": "backport",
+  "description": "GitHub backport action with custom input.",
   "version": "1.0.0",
-  "description": "This action prints \"Hello World\" or \"Hello\" + the name of a person to greet to the log.",
-  "main": "index.js",
-  "scripts": {
-    "build": "rollup --config rollup.config.mjs"
-  },
+  "author": "Nick-v-L",
+  "type": "module",
+  "private": true,
+  "homepage": "https://github.com/Nick-v-L/backport#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Nick-v-L/backport.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "module",
   "bugs": {
     "url": "https://github.com/Nick-v-L/backport/issues"
   },
-  "homepage": "https://github.com/Nick-v-L/backport#readme",
+  "keywords": [
+    "actions",
+    "backport",
+    "github"
+  ],
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "package": "npx rimraf ./dist && npx rollup --config rollup.config.ts --configPlugin @rollup/plugin-typescript",
+    "package:watch": "npm run package -- --watch",
+    "local-action": "npx @github/local-action . src/main.ts .env"
+  },
+  "license": "ISC",
   "dependencies": {
     "@actions/core": "^3.0.0",
     "@actions/github": "^9.0.0"
@@ -25,6 +37,8 @@
   "devDependencies": {
     "@rollup/plugin-commonjs": "^29.0.2",
     "@rollup/plugin-node-resolve": "^16.0.3",
-    "rollup": "^4.60.0"
+    "@rollup/plugin-typescript": "^12.3.0",
+    "rollup": "^4.60.0",
+    "tslib": "^2.8.1"
   }
 }
