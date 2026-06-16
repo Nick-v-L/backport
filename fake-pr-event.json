@@ -1,0 +1,49 @@
+{
+    "action": "closed",
+    "number": 123,
+    "pull_request": {
+        "number": 123,
+        "title": "Test PR for backport",
+        "body": "This is a fake PR to test backporting.\n\nbackport to v1.0.x",
+        "head": {
+            "ref": "feature-branch",
+            "sha": "abc123def456789"
+        },
+        "base": {
+            "ref": "main",
+            "sha": "def456abc789012"
+        },
+        "labels": [
+            {
+                "name": "backport-to-v1.0.x"
+            },
+            {
+                "name": "backport-to-test"
+            },
+            {
+                "name": "backport-to-dev"
+            },
+            {
+                "name": "random-label"
+            }
+        ],
+        "user": {
+            "login": "testuser"
+        },
+        "merged": true,
+        "comments": 3,
+        "comments_url": "https://api.github.com/repos/Nick-v-L/backport/issues/123/comments"
+    },
+    "repository": {
+        "id": 123456789,
+        "full_name": "Nick-v-L/backport",
+        "owner": {
+            "login": "Nick-v-L",
+            "id": 987654321
+        }
+    },
+    "sender": {
+        "login": "Nick-v-L",
+        "id": 987654321
+    }
+}

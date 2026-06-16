@@ -1,1 +1,1 @@
-export type InputMethod = "label" | "comment" | "custom";
+export type DetectionMethod = "label" | "comment" | "custom";

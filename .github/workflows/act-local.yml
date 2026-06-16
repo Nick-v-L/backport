@@ -1,0 +1,26 @@
+name: Local act pull request test
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backport-local-test:
+    name: Local backport action test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Run backport action in dry-run mode
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          detection-method: custom
+          input-pattern: "^v\\d+\\.\\d+\\.x$"
+          input-prefix: "backport-to-"
+          target-branch-prefix: "backport/"
+          custom-input: "backport-to-v1.0.x"
+          dry-run: true

@@ -1,0 +1,14 @@
+# Sample file for backport testing
+
+This file is intentionally simple. Make edits to this file in a feature branch and open a Pull Request. Then merge the PR and comment on the PR with:
+
+/backport v2.2.x
+
+The action will attempt to backport the commits touching this file into the `backport/v2.2.x` branch.
+
+---
+
+Current content:
+
+- Line 1: initial content
+- Line 2: more content

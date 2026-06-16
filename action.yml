@@ -1,9 +1,44 @@
 name: Backport
-description: Backport pull request to a specified branch based on labels, comments or anything else you can think of.
+description: Backport pull request to a specified branch based on labels, comments or custom input.
 
 inputs:
   github-token:
+    description: "GitHub token with permissions to create pull requests."
     default: ${{ github.token }}
+    required: false
+
+  detection-method:
+    description: "Method to detect target branches for backporting (e.g., 'label', 'comment', 'custom')."
+    default: "label"
+    required: false
+
+  input-pattern:
+    description: "Regex pattern to match input values for backporting branches."
+    default: "^v\\d+\\.\\d+\\.x$"
+    required: false
+
+  input-prefix:
+    description: "Prefix for input values."
+    default: "backport-to-"
+    required: false
+
+  target-branch-prefix:
+    description: "Prefix for the backport source branch."
+    default: "backport/"
+    required: false
+
+  # checkout-branch:
+  #   description: "Branch to base a new backport source branch on if the backport branch does not already exist."
+  #   required: false
+
+  custom-input:
+    description: "Custom input for backporting branches."
+    required: false
+
+  dry-run:
+    description: "If true, only log intended backport actions without performing them."
+    default: "false"
+    required: false
 
 runs:
   using: node24

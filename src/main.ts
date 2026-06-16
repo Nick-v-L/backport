@@ -1,5 +1,7 @@
 import * as core from "@actions/core";
-import { wait } from "./wait.ts";
+import * as github from "@actions/github";
+import { DetectionMethod } from "./interfaces.js";
+import { getInputBasedOnMethod, backport } from "./backport.js";
 
 /**
  * The main function for the action.
@@ -8,20 +10,104 @@ import { wait } from "./wait.ts";
  */
 export async function run(): Promise<void> {
   try {
-    const ms: string = core.getInput("milliseconds");
+    const githubToken = core.getInput("github-token");
+    const detectionMethod = core.getInput(
+      "detection-method",
+    ) as DetectionMethod;
+    const inputPattern = core
+      .getInput("input-pattern")
+      .split(",")
+      .map((branch) => branch.trim());
+    const inputPrefix = core.getInput("input-prefix");
+    const customInput = core.getInput("custom-input");
+    const targetBranchPrefix = core.getInput("target-branch-prefix");
+    const dryRun = core.getBooleanInput("dry-run");
 
-    // Debug logs are only output if the `ACTIONS_STEP_DEBUG` secret is true
-    core.debug(`Waiting ${ms} milliseconds ...`);
+    core.startGroup("Action Inputs");
+    core.debug(`Input method: ${detectionMethod}`);
+    core.debug(`Input pattern: ${inputPattern.join(", ")}`);
+    core.debug(`Input prefix: ${inputPrefix}`);
+    core.debug(`Custom input: ${customInput}`);
+    core.debug(`Branch prefix: ${targetBranchPrefix}`);
+    core.debug(`GitHub token provided: ${Boolean(githubToken)}`);
+    core.debug(`Dry run: ${dryRun}`);
+    core.endGroup();
 
-    // Log the current timestamp, wait, then log the new timestamp
-    core.debug(new Date().toTimeString());
-    await wait(parseInt(ms, 10));
-    core.debug(new Date().toTimeString());
+    if (!["label", "comment", "custom"].includes(detectionMethod)) {
+      throw new Error(
+        `Invalid detection method: ${detectionMethod}. Valid options are: label, comment, custom.`,
+      );
+    }
 
-    // Set outputs for other workflow steps to use
-    core.setOutput("time", new Date().toTimeString());
+    if (customInput && detectionMethod !== "custom") {
+      core.warning(
+        `Custom input provided, but input method is not set to custom. Custom input will be ignored.`,
+      );
+    }
+
+    if (!github.context.payload.pull_request) {
+      throw new Error(
+        `This action can only be run in the context of a pull request.`,
+      );
+    }
+
+    const pullRequest = github.context.payload.pull_request;
+    const repoOwner = github.context.repo.owner;
+    const repoName = github.context.repo.repo;
+    const prNumber = pullRequest.number;
+    const prBaseBranch = pullRequest.base.ref;
+    const prHeadBranch = pullRequest.head.ref;
+    const prTitle = pullRequest.title;
+    const prUrl = pullRequest.html_url;
+
+    core.startGroup("Pull Request Context");
+    core.debug(`PR number: ${prNumber}`);
+    core.debug(`PR title: ${prTitle}`);
+    core.debug(`PR base branch: ${prBaseBranch}`);
+    core.debug(`PR head branch: ${prHeadBranch}`);
+
+    const labels: string[] = pullRequest.labels.map(
+      (label: { name: string }) => label.name,
+    );
+    core.debug(`PR labels: ${labels.join(", ")}`);
+    core.debug(`Full PR payload: ${JSON.stringify(pullRequest, null, 2)}`);
+    core.endGroup();
+
+    if (dryRun) {
+      core.notice(`Dry run mode enabled. No actual backports will be created.`);
+    }
+
+    const input = await getInputBasedOnMethod(
+      detectionMethod,
+      labels,
+      customInput,
+      githubToken,
+      repoOwner,
+      repoName,
+      prNumber,
+    );
+
+    core.info(`Input: ${input.join(", ")}`);
+
+    await backport(
+      input,
+      inputPrefix,
+      inputPattern,
+      targetBranchPrefix,
+      prBaseBranch,
+      githubToken,
+      repoOwner,
+      repoName,
+      prNumber,
+      prHeadBranch,
+      prTitle,
+      dryRun,
+    );
   } catch (error) {
-    // Fail the workflow run if an error occurs
-    if (error instanceof Error) core.setFailed(error.message);
+    if (error instanceof Error) {
+      core.setFailed(error.message);
+    } else {
+      core.setFailed(String(error));
+    }
   }
 }
