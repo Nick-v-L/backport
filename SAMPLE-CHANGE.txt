@@ -12,3 +12,4 @@ Current content:
 
 - Line 1: initial content
 - Line 2: more content
+- Line 3: another test
