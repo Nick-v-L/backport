@@ -548,7 +548,6 @@ export async function backport(
     const targetBranch = inputItem.substring(inputPrefix.length);
     core.debug(`Target branch after prefix removal: ${targetBranch}`);
 
-    // TODO check if regex also can do v2.10.1039
     const isValidBranch = inputPattern.some((pattern) => {
       const regex = new RegExp(pattern);
       return regex.test(targetBranch);
