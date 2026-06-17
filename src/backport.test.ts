@@ -231,11 +231,9 @@ describe("buildBackportComment", () => {
     expect(comment).toContain("**⚠️ Some backports failed**");
     expect(comment).toContain("| Status | Branch | Result | PR |");
     expect(comment).toContain(
-      "| ✅ created | v2.2.x | Backport created | [link](https://example.com/pr/123) |",
+      "| ✅ | v2.2.x | Backport created | [link](https://example.com/pr/123) |",
     );
-    expect(comment).toContain(
-      "| ❌ failed | v3.0.x | ❌ Cherry-pick conflict | - |",
-    );
+    expect(comment).toContain("| ❌ | v3.0.x | ❌ Cherry-pick conflict | - |");
   });
 
   it("shows a success header when all backports are created", () => {
@@ -253,7 +251,7 @@ describe("buildBackportComment", () => {
 
     expect(comment).toContain("**💚 All backports created successfully**");
     expect(comment).toContain(
-      "| ✅ created | v2.2.x | Backport created | [link](https://example.com/pr/123) |",
+      "| ✅ | v2.2.x | Backport created | [link](https://example.com/pr/123) |",
     );
   });
 
@@ -273,7 +271,7 @@ describe("buildBackportComment", () => {
     const comment = buildBackportComment(rows as any);
 
     expect(comment).toContain(
-      "| ❌ failed | v1.1.x | ❌ Command failed: git fetch origin backport/v1.1.x fatal: couldn't find remote ref backport/v1.1.x | - |",
+      "| ❌ | v1.1.x | ❌ Command failed: git fetch origin backport/v1.1.x fatal: couldn't find remote ref backport/v1.1.x | - |",
     );
     expect(comment).not.toContain("\nFatal:");
   });
@@ -501,6 +499,50 @@ describe("checkoutBackportBranch", () => {
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
     });
+  });
+
+  it("fails when no matching tag exists for the requested branch", () => {
+    execMock
+      .mockImplementationOnce(() => {
+        throw new Error("branch not found");
+      })
+      .mockImplementationOnce(() => {
+        throw new Error("remote branch not found");
+      })
+      .mockReturnValueOnce("\n")
+      .mockImplementationOnce(() => "")
+      .mockImplementationOnce(() => "");
+
+    expect(() =>
+      checkoutBackportBranch("backport/v1.1.x", "v1.1.x", "main"),
+    ).toThrow(
+      "No matching tag found for v1.1.x. Cannot create backport/v1.1.x.",
+    );
+
+    expect(execMock).toHaveBeenNthCalledWith(
+      3,
+      "git tag --list",
+      {
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
+    expect(execMock).toHaveBeenNthCalledWith(
+      4,
+      "git fetch --tags origin",
+      {
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
+    expect(execMock).toHaveBeenNthCalledWith(
+      5,
+      "git tag --list",
+      {
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
   });
 });
 

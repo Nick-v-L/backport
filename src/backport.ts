@@ -224,7 +224,6 @@ export function findLatestMatchingTag(
 
   const matchingTags = tags.filter((tag) => {
     const match = tagMatchesBranchPattern(tag, branchPattern);
-    console.log(`findLatestMatchingTag: checking tag=${tag} match=${match}`);
     return match;
   });
 
@@ -305,20 +304,8 @@ export function checkoutBackportBranch(
     return;
   }
 
-  core.info(`Creating new backport branch ${sourceBranch} from ${baseBranch}`);
-  if (localBranchExists(baseBranch)) {
-    runGitCommand(`git checkout -b ${sourceBranch} ${baseBranch}`);
-    return;
-  }
-
-  if (remoteBranchExists(baseBranch)) {
-    runGitCommand(`git fetch origin ${baseBranch}`);
-    runGitCommand(`git checkout -b ${sourceBranch} origin/${baseBranch}`);
-    return;
-  }
-
   throw new Error(
-    `Base branch ${baseBranch} does not exist locally or remotely. Cannot create ${sourceBranch}.`,
+    `No matching tag found for ${tagName}. Cannot create ${sourceBranch}.`,
   );
 }
 
@@ -364,9 +351,9 @@ function sanitizeMarkdownTableCell(value: string): string {
 function formatStatusBadge(status: string): string {
   switch (status) {
     case "created":
-      return "✅ created";
+      return "✅";
     case "failed":
-      return "❌ failed";
+      return "❌";
     case "already exists":
       return "⚠️ already exists";
     default:

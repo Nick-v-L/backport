@@ -33197,7 +33197,6 @@ function findLatestMatchingTag(tags, branchName) {
     }
     const matchingTags = tags.filter((tag) => {
         const match = tagMatchesBranchPattern(tag, branchPattern);
-        console.log(`findLatestMatchingTag: checking tag=${tag} match=${match}`);
         return match;
     });
     matchingTags.sort((a, b) => {
@@ -33258,17 +33257,7 @@ function checkoutBackportBranch(sourceBranch, tagName, baseBranch) {
         runGitCommand(`git checkout -b ${sourceBranch} ${fetchedTag}`);
         return;
     }
-    info(`Creating new backport branch ${sourceBranch} from ${baseBranch}`);
-    if (localBranchExists(baseBranch)) {
-        runGitCommand(`git checkout -b ${sourceBranch} ${baseBranch}`);
-        return;
-    }
-    if (remoteBranchExists(baseBranch)) {
-        runGitCommand(`git fetch origin ${baseBranch}`);
-        runGitCommand(`git checkout -b ${sourceBranch} origin/${baseBranch}`);
-        return;
-    }
-    throw new Error(`Base branch ${baseBranch} does not exist locally or remotely. Cannot create ${sourceBranch}.`);
+    throw new Error(`No matching tag found for ${tagName}. Cannot create ${sourceBranch}.`);
 }
 function prepareBackportPrBranch(backportBranch) {
     if (localBranchExists(backportBranch)) {
@@ -33295,9 +33284,9 @@ function sanitizeMarkdownTableCell(value) {
 function formatStatusBadge(status) {
     switch (status) {
         case "created":
-            return "✅ created";
+            return "✅";
         case "failed":
-            return "❌ failed";
+            return "❌";
         case "already exists":
             return "⚠️ already exists";
         default:
