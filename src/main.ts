@@ -9,7 +9,6 @@ import { getInputBasedOnMethod, backport } from "./backport.js";
  * @returns Resolves when the action is complete.
  */
 export async function run(): Promise<void> {
-  core.info("Starting backport action...");
   try {
     const githubToken = core.getInput("github-token");
     const detectionMethod = core.getInput(

@@ -33047,9 +33047,67 @@ function getOctokit(token, options, ...additionalPlugins) {
 function handleCustomInput(customInput) {
     return customInput.split(/[\s,]+/).filter(Boolean);
 }
+function parseCommentInput(commentBody) {
+    debug(`Parsing comment body for backport inputs: ${commentBody}`);
+    const regex = /\/backport\s+([^\s,]+)/gi;
+    const matches = Array.from(commentBody.matchAll(regex));
+    return matches.map((match) => `backport-to-${match[1]}`);
+}
+function getCommentBody() {
+    const payload = context.payload;
+    return (payload.comment?.body ??
+        payload.pull_request?.body ??
+        payload.issue?.body ??
+        "");
+}
+async function listPullRequestComments(octokit, owner, repo, issueNumber) {
+    const commentBodies = [];
+    let page = 1;
+    while (true) {
+        const response = await octokit.rest.issues.listComments({
+            owner,
+            repo,
+            issue_number: issueNumber,
+            per_page: 100,
+            page,
+        });
+        if (!response.data.length) {
+            break;
+        }
+        for (const comment of response.data) {
+            if (comment.body) {
+                commentBodies.push(comment.body);
+            }
+        }
+        page += 1;
+    }
+    return commentBodies;
+}
+async function getCommentInputs(githubToken, owner, repo, issueNumber) {
+    const inputs = new Set();
+    const body = getCommentBody();
+    parseCommentInput(body).forEach((input) => inputs.add(input));
+    if (githubToken && owner && repo && issueNumber) {
+        try {
+            const octokit = getOctokit(githubToken);
+            const commentBodies = await listPullRequestComments(octokit, owner, repo, issueNumber);
+            debug(`Fetched ${commentBodies.length} comments from pull request`);
+            for (const commentBody of commentBodies) {
+                parseCommentInput(commentBody).forEach((input) => inputs.add(input));
+            }
+        }
+        catch {
+            warning("Unable to list pull request comments; falling back to current comment body only.");
+        }
+    }
+    return [...inputs];
+}
 function runGitCommand(command) {
     debug(`Running git command: ${command}`);
-    return execSync(command, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+    return execSync(command, {
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
 }
 function localBranchExists(branchName) {
     try {
@@ -33069,6 +33127,102 @@ function remoteBranchExists(branchName) {
         return false;
     }
 }
+function escapeRegExp(value) {
+    return value.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+}
+function parseBranchPattern(branchName) {
+    const match = branchName.match(/^(.*?)(v?\d+(?:\.\d+){0,2})\.x(.*)$/);
+    if (!match) {
+        return null;
+    }
+    const [, prefix, versionString, suffix] = match;
+    const numbers = versionString.replace(/^v/, "").split(".").map(Number);
+    return {
+        prefix,
+        suffix,
+        major: numbers[0],
+        minor: numbers[1],
+        versionString,
+    };
+}
+function parseTagVersion(tag) {
+    const match = tag.match(/v?\d+(?:\.\d+){1,2}/);
+    if (!match) {
+        return null;
+    }
+    const numbers = match[0].replace(/^v/, "").split(".").map(Number);
+    return {
+        major: numbers[0],
+        minor: numbers[1] ?? 0,
+        patch: numbers[2] ?? 0,
+    };
+}
+function tagMatchesBranchPattern(tag, branchPattern) {
+    const tagVersionMatch = tag.match(/v?\d+(?:\.\d+){1,2}/);
+    if (!tagVersionMatch) {
+        return false;
+    }
+    const tagNumbers = tagVersionMatch[0]
+        .replace(/^v/, "")
+        .split(".")
+        .map(Number);
+    if (tagNumbers[0] !== branchPattern.major) {
+        return false;
+    }
+    if (branchPattern.minor !== undefined &&
+        !Number.isNaN(branchPattern.minor) &&
+        tagNumbers[1] !== branchPattern.minor) {
+        return false;
+    }
+    if (!branchPattern.prefix && !branchPattern.suffix) {
+        return true;
+    }
+    const prefix = escapeRegExp(branchPattern.prefix);
+    const suffix = escapeRegExp(branchPattern.suffix);
+    const versionNoV = branchPattern.versionString.replace(/^v/, "");
+    const parts = versionNoV.split(".");
+    const versionPattern = parts.length === 1
+        ? `v?${escapeRegExp(parts[0])}\\.[0-9]+\\.[0-9]+`
+        : `v?${parts.map(escapeRegExp).join("\\.")}\\.[0-9]+`;
+    const regex = new RegExp(`^${prefix}${versionPattern}${suffix}$`);
+    debug(`tagMatchesBranchPattern: tag=${tag} regex=${regex} prefix=${branchPattern.prefix} suffix=${branchPattern.suffix} versionPattern=${versionPattern}`);
+    const result = regex.test(tag);
+    debug(`tagMatchesBranchPattern result=${result}`);
+    return result;
+}
+function findLatestMatchingTag(tags, branchName) {
+    const branchPattern = parseBranchPattern(branchName);
+    if (!branchPattern) {
+        return null;
+    }
+    const matchingTags = tags.filter((tag) => {
+        const match = tagMatchesBranchPattern(tag, branchPattern);
+        console.log(`findLatestMatchingTag: checking tag=${tag} match=${match}`);
+        return match;
+    });
+    matchingTags.sort((a, b) => {
+        const aVersion = parseTagVersion(a) ?? { major: 0, minor: 0, patch: 0 };
+        const bVersion = parseTagVersion(b) ?? { major: 0, minor: 0, patch: 0 };
+        if (aVersion.major !== bVersion.major) {
+            return bVersion.major - aVersion.major;
+        }
+        if (aVersion.minor !== bVersion.minor) {
+            return bVersion.minor - aVersion.minor;
+        }
+        return bVersion.patch - aVersion.patch;
+    });
+    return matchingTags[0] ?? null;
+}
+function getLatestTagForBranch(branchName) {
+    try {
+        const allTags = runGitCommand("git tag --list");
+        const tags = allTags.split("\n").filter(Boolean);
+        return findLatestMatchingTag(tags, branchName);
+    }
+    catch {
+        return null;
+    }
+}
 function commitAlreadyOnBranch(commitSha) {
     try {
         runGitCommand(`git merge-base --is-ancestor ${commitSha} HEAD`);
@@ -33078,7 +33232,7 @@ function commitAlreadyOnBranch(commitSha) {
         return false;
     }
 }
-function checkoutBackportBranch(sourceBranch, baseBranch) {
+function checkoutBackportBranch(sourceBranch, tagName, baseBranch) {
     if (localBranchExists(sourceBranch)) {
         info(`Checking out existing local backport branch ${sourceBranch}`);
         runGitCommand(`git checkout ${sourceBranch}`);
@@ -33088,6 +33242,20 @@ function checkoutBackportBranch(sourceBranch, baseBranch) {
         info(`Fetching and checking out existing remote backport branch ${sourceBranch}`);
         runGitCommand(`git fetch origin ${sourceBranch}`);
         runGitCommand(`git checkout --track origin/${sourceBranch}`);
+        return;
+    }
+    const localTag = getLatestTagForBranch(tagName);
+    if (localTag) {
+        info(`Creating new backport branch ${sourceBranch} from local tag ${localTag}`);
+        runGitCommand(`git checkout -b ${sourceBranch} ${localTag}`);
+        return;
+    }
+    info(`Fetching tags from origin to look for a matching tag for ${tagName}`);
+    runGitCommand(`git fetch --tags origin`);
+    const fetchedTag = getLatestTagForBranch(tagName);
+    if (fetchedTag) {
+        info(`Creating new backport branch ${sourceBranch} from fetched tag ${fetchedTag}`);
+        runGitCommand(`git checkout -b ${sourceBranch} ${fetchedTag}`);
         return;
     }
     info(`Creating new backport branch ${sourceBranch} from ${baseBranch}`);
@@ -33101,6 +33269,45 @@ function checkoutBackportBranch(sourceBranch, baseBranch) {
         return;
     }
     throw new Error(`Base branch ${baseBranch} does not exist locally or remotely. Cannot create ${sourceBranch}.`);
+}
+function prepareBackportPrBranch(backportBranch) {
+    if (localBranchExists(backportBranch)) {
+        info(`Checking out existing local backport pull branch ${backportBranch}`);
+        runGitCommand(`git checkout ${backportBranch}`);
+        return;
+    }
+    if (remoteBranchExists(backportBranch)) {
+        info(`Fetching and checking out existing remote backport pull branch ${backportBranch}`);
+        runGitCommand(`git fetch origin ${backportBranch}`);
+        runGitCommand(`git checkout --track origin/${backportBranch}`);
+        return;
+    }
+    info(`Creating new backport pull branch ${backportBranch}`);
+    runGitCommand(`git checkout -b ${backportBranch}`);
+}
+function buildBackportComment(rows) {
+    const header = [
+        "Backport action results:",
+        "",
+        "| Request | Target branch | Result | Backport branch | PR |",
+        "|---|---|---|---|---|",
+    ];
+    const body = rows.map((row) => {
+        const result = row.error ? `${row.status}: ${row.error}` : row.status;
+        const branch = row.branch || "-";
+        const prLink = row.prUrl ? `[link](${row.prUrl})` : "-";
+        return `| ${row.request} | ${row.targetBranch} | ${result} | ${branch} | ${prLink} |`;
+    });
+    return [...header, ...body].join("\n");
+}
+async function commentOnOriginalPullRequest(octokit, owner, repo, issueNumber, rows) {
+    const body = buildBackportComment(rows);
+    await octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: issueNumber,
+        body,
+    });
 }
 function cherryPickCommits(commitShas) {
     for (const commitSha of commitShas) {
@@ -33162,14 +33369,14 @@ async function createBackportPullRequest(octokit, owner, repo, sourceBranch, tar
     });
     return response.data.html_url;
 }
-async function getInputBasedOnMethod(detectionMethod, labels, customInput) {
+async function getInputBasedOnMethod(detectionMethod, labels, customInput, githubToken, repoOwner, repoName, prNumber) {
     switch (detectionMethod) {
         case "label":
             info("Using label input method");
             return labels;
         case "comment":
             info("Using comment input method");
-            return [];
+            return getCommentInputs(githubToken, repoOwner, repoName, prNumber);
         case "custom":
             info("Using custom input method");
             return handleCustomInput(customInput);
@@ -33177,59 +33384,100 @@ async function getInputBasedOnMethod(detectionMethod, labels, customInput) {
             throw new Error(`Unsupported input method: ${detectionMethod}`);
     }
 }
-async function backport(inputs, inputPrefix, validBackportBranches, backportBranchPrefix, checkoutBranch, githubToken, repoOwner, repoName, prNumber, prBaseBranch, prHeadBranch, prTitle, prUrl, dryRun) {
+async function backport(inputs, inputPrefix, inputPattern, targetBranchPrefix, prBaseBranch, githubToken, repoOwner, repoName, prNumber, prHeadBranch, prTitle, dryRun) {
     const octokit = getOctokit(githubToken);
+    const results = [];
     for (const inputItem of inputs) {
         startGroup(`Processing input item: ${inputItem}`);
         debug(`Processing input: ${inputItem}`);
         if (!inputItem.startsWith(inputPrefix)) {
             info(`Input "${inputItem}" does not start with required prefix "${inputPrefix}". Skipping.`);
+            results.push({
+                request: inputItem,
+                targetBranch: inputItem,
+                status: "skipped",
+                branch: "",
+                prUrl: "",
+                error: `Invalid prefix; expected ${inputPrefix}`,
+            });
             endGroup();
             continue;
         }
         const targetBranch = inputItem.substring(inputPrefix.length);
         debug(`Target branch after prefix removal: ${targetBranch}`);
-        const isValidBranch = validBackportBranches.some((pattern) => {
+        const isValidBranch = inputPattern.some((pattern) => {
             const regex = new RegExp(pattern);
             return regex.test(targetBranch);
         });
         if (!isValidBranch) {
             info(`Target branch "${targetBranch}" does not match any valid backport branch patterns. Skipping.`);
+            results.push({
+                request: inputItem,
+                targetBranch,
+                status: "skipped",
+                branch: "",
+                prUrl: "",
+                error: "Target branch does not match valid backport patterns",
+            });
             endGroup();
             continue;
         }
-        const sourceBranch = `${backportBranchPrefix}${targetBranch}`;
-        debug(`Backport source branch: ${sourceBranch}`);
+        const targetBranchWithPrefix = `${targetBranchPrefix}${targetBranch}`;
+        debug(`Backport target branch: ${targetBranchWithPrefix}`);
         const title = `Backport #${prNumber} to ${targetBranch}`;
-        const body = `Backport of [#${prNumber}](${prUrl}) from ${prHeadBranch} into ${targetBranch}.
+        const body = `Backport of [#${prNumber}] from ${prHeadBranch} into ${targetBranch}.
 
-Original PR title: ${prTitle}`;
-        if (dryRun) {
-            info(`Dry run: would create or update branch ${sourceBranch} from ${checkoutBranch}`);
-            info(`Dry run: would cherry-pick PR commits and push ${sourceBranch} to origin`);
-            info(`Dry run: would create PR from ${sourceBranch} into ${targetBranch}`);
-            endGroup();
-            continue;
+    Original PR title: ${prTitle}`;
+        const backportPrBranch = `${targetBranchWithPrefix}/pr-${prNumber}`;
+        try {
+            checkoutBackportBranch(targetBranchWithPrefix, targetBranch, prBaseBranch);
+            prepareBackportPrBranch(backportPrBranch);
+            const commitShas = await getPullRequestCommitShas(octokit, repoOwner, repoName, prNumber);
+            if (commitShas.length === 0) {
+                throw new Error(`Pull request #${prNumber} contains no commits. Cannot backport.`);
+            }
+            cherryPickCommits(commitShas);
+            info(`Pushing backport branch ${backportPrBranch} to origin`);
+            runGitCommand(`git push --set-upstream origin ${backportPrBranch}`);
+            const existingPr = await findExistingBackportPullRequest(octokit, repoOwner, repoName, backportPrBranch, targetBranch);
+            let prUrl;
+            let status;
+            if (existingPr) {
+                info(`Backport pull request already exists: ${existingPr.html_url}`);
+                prUrl = existingPr.html_url;
+                status = "already exists";
+            }
+            else {
+                prUrl = await createBackportPullRequest(octokit, repoOwner, repoName, backportPrBranch, targetBranch, title, body);
+                info(`Created backport pull request: ${prUrl}`);
+                status = "created";
+            }
+            results.push({
+                request: inputItem,
+                targetBranch,
+                status,
+                branch: backportPrBranch,
+                prUrl,
+            });
         }
-        checkoutBackportBranch(sourceBranch, checkoutBranch);
-        const commitShas = await getPullRequestCommitShas(octokit, repoOwner, repoName, prNumber);
-        if (commitShas.length === 0) {
-            warning(`Pull request #${prNumber} contains no commits. Skipping backport.`);
-            endGroup();
-            continue;
+        catch (error$1) {
+            const message = error$1 instanceof Error ? error$1.message : String(error$1);
+            error(`Backport failed for ${inputItem}: ${message}`);
+            results.push({
+                request: inputItem,
+                targetBranch,
+                status: "failed",
+                branch: backportPrBranch,
+                prUrl: "",
+                error: message,
+            });
         }
-        cherryPickCommits(commitShas);
-        info(`Pushing backport branch ${sourceBranch} to origin`);
-        runGitCommand(`git push --set-upstream origin ${sourceBranch}`);
-        const existingPr = await findExistingBackportPullRequest(octokit, repoOwner, repoName, sourceBranch, targetBranch);
-        if (existingPr) {
-            info(`Backport pull request already exists: ${existingPr.html_url}`);
+        finally {
             endGroup();
-            continue;
         }
-        const prUrlCreated = await createBackportPullRequest(octokit, repoOwner, repoName, sourceBranch, targetBranch, title, body);
-        info(`Created backport pull request: ${prUrlCreated}`);
-        endGroup();
+    }
+    if (results.length > 0) {
+        await commentOnOriginalPullRequest(octokit, repoOwner, repoName, prNumber, results);
     }
 }
 
@@ -33242,22 +33490,19 @@ async function run() {
     try {
         const githubToken = getInput("github-token");
         const detectionMethod = getInput("detection-method");
-        const validBackportBranches = getInput("valid-backport-branches")
+        const inputPattern = getInput("input-pattern")
             .split(",")
-            .map((branch) => branch.trim())
-            .filter(Boolean);
+            .map((branch) => branch.trim());
         const inputPrefix = getInput("input-prefix");
         const customInput = getInput("custom-input");
-        const branchPrefix = getInput("branch-prefix");
-        const checkoutBranch = getInput("checkout-branch");
+        const targetBranchPrefix = getInput("target-branch-prefix");
         const dryRun = getBooleanInput("dry-run");
         startGroup("Action Inputs");
         debug(`Input method: ${detectionMethod}`);
-        debug(`Target branches: ${validBackportBranches.join(", ")}`);
+        debug(`Input pattern: ${inputPattern.join(", ")}`);
         debug(`Input prefix: ${inputPrefix}`);
         debug(`Custom input: ${customInput}`);
-        debug(`Branch prefix: ${branchPrefix}`);
-        debug(`Checkout branch: ${checkoutBranch}`);
+        debug(`Branch prefix: ${targetBranchPrefix}`);
         debug(`GitHub token provided: ${Boolean(githubToken)}`);
         debug(`Dry run: ${dryRun}`);
         endGroup();
@@ -33290,9 +33535,9 @@ async function run() {
         if (dryRun) {
             notice(`Dry run mode enabled. No actual backports will be created.`);
         }
-        const input = await getInputBasedOnMethod(detectionMethod, labels, customInput);
+        const input = await getInputBasedOnMethod(detectionMethod, labels, customInput, githubToken, repoOwner, repoName, prNumber);
         info(`Input: ${input.join(", ")}`);
-        await backport(input, inputPrefix, validBackportBranches, branchPrefix, checkoutBranch || prBaseBranch, githubToken, repoOwner, repoName, prNumber, prBaseBranch, prHeadBranch, prTitle, prUrl, dryRun);
+        await backport(input, inputPrefix, inputPattern, targetBranchPrefix, prBaseBranch, githubToken, repoOwner, repoName, prNumber, prHeadBranch, prTitle, dryRun);
     }
     catch (error) {
         if (error instanceof Error) {
