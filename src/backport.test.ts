@@ -157,6 +157,27 @@ describe("findLatestMatchingTag", () => {
     ).toBe("v2.2.5");
   });
 
+  it("returns the newest matching tag for branch patterns with two-digit minor versions", () => {
+    expect(
+      findLatestMatchingTag(["2.25.0", "2.25.3", "2.24.9"], "2.25.x"),
+    ).toBe("2.25.3");
+  });
+
+  it("returns the newest matching tag for branch patterns with two-digit major versions", () => {
+    expect(findLatestMatchingTag(["10.0.0", "10.0.2", "9.9.9"], "10.0.x")).toBe(
+      "10.0.2",
+    );
+  });
+
+  it("returns the newest matching prefixed semantic tag for a branch with prefix", () => {
+    expect(
+      findLatestMatchingTag(
+        ["software-v1.0.7", "software-v1.0.9", "hardware-v1.0.9"],
+        "software-v1.0.x",
+      ),
+    ).toBe("software-v1.0.9");
+  });
+
   it("returns null when no matching tags exist", () => {
     expect(findLatestMatchingTag(["2.3.0", "2.4.1"], "2.2.x")).toBeNull();
   });

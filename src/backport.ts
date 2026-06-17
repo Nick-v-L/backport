@@ -9,6 +9,7 @@ function handleCustomInput(customInput: string): string[] {
 }
 
 function parseCommentInput(commentBody: string): string[] {
+  core.debug(`Parsing comment body for backport inputs: ${commentBody}`);
   const regex = /\/backport\s+([^\s,]+)/gi;
   const matches = Array.from(commentBody.matchAll(regex));
   return matches.map((match) => `backport-to-${match[1]}`);
@@ -77,6 +78,8 @@ async function getCommentInputs(
         issueNumber,
       );
 
+      core.debug(`Fetched ${commentBodies.length} comments from pull request`);
+
       for (const commentBody of commentBodies) {
         parseCommentInput(commentBody).forEach((input) => inputs.add(input));
       }
@@ -116,41 +119,126 @@ function remoteBranchExists(branchName: string): boolean {
   }
 }
 
+type BranchPattern = {
+  prefix: string;
+  suffix: string;
+  major: number;
+  minor?: number;
+  versionString: string;
+};
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+}
+
+function parseBranchPattern(branchName: string): BranchPattern | null {
+  const match = branchName.match(/^(.*?)(v?\d+(?:\.\d+){0,2})\.x(.*)$/);
+  if (!match) {
+    return null;
+  }
+
+  const [, prefix, versionString, suffix] = match;
+  const numbers = versionString.replace(/^v/, "").split(".").map(Number);
+
+  return {
+    prefix,
+    suffix,
+    major: numbers[0],
+    minor: numbers[1],
+    versionString,
+  };
+}
+
+function parseTagVersion(
+  tag: string,
+): { major: number; minor: number; patch: number } | null {
+  const match = tag.match(/v?\d+(?:\.\d+){1,2}/);
+  if (!match) {
+    return null;
+  }
+
+  const numbers = match[0].replace(/^v/, "").split(".").map(Number);
+  return {
+    major: numbers[0],
+    minor: numbers[1] ?? 0,
+    patch: numbers[2] ?? 0,
+  };
+}
+
+function tagMatchesBranchPattern(
+  tag: string,
+  branchPattern: BranchPattern,
+): boolean {
+  const tagVersionMatch = tag.match(/v?\d+(?:\.\d+){1,2}/);
+  if (!tagVersionMatch) {
+    return false;
+  }
+
+  const tagNumbers = tagVersionMatch[0]
+    .replace(/^v/, "")
+    .split(".")
+    .map(Number);
+
+  if (tagNumbers[0] !== branchPattern.major) {
+    return false;
+  }
+
+  if (
+    branchPattern.minor !== undefined &&
+    !Number.isNaN(branchPattern.minor) &&
+    tagNumbers[1] !== branchPattern.minor
+  ) {
+    return false;
+  }
+
+  if (!branchPattern.prefix && !branchPattern.suffix) {
+    return true;
+  }
+
+  const prefix = escapeRegExp(branchPattern.prefix);
+  const suffix = escapeRegExp(branchPattern.suffix);
+  const versionNoV = branchPattern.versionString.replace(/^v/, "");
+  const parts = versionNoV.split(".");
+  const versionPattern =
+    parts.length === 1
+      ? `v?${escapeRegExp(parts[0])}\\.[0-9]+\\.[0-9]+`
+      : `v?${parts.map(escapeRegExp).join("\\.")}\\.[0-9]+`;
+
+  const regex = new RegExp(`^${prefix}${versionPattern}${suffix}$`);
+  core.debug(
+    `tagMatchesBranchPattern: tag=${tag} regex=${regex} prefix=${branchPattern.prefix} suffix=${branchPattern.suffix} versionPattern=${versionPattern}`,
+  );
+  const result = regex.test(tag);
+  core.debug(`tagMatchesBranchPattern result=${result}`);
+  return result;
+}
+
 export function findLatestMatchingTag(
   tags: string[],
   branchName: string,
 ): string | null {
-  const branchBase = branchName.replace(/\.x$/, "");
-  const normalizedBase = branchBase.startsWith("v")
-    ? branchBase.slice(1)
-    : branchBase;
+  const branchPattern = parseBranchPattern(branchName);
+  if (!branchPattern) {
+    return null;
+  }
 
-  const versionRegexes = [
-    new RegExp(
-      `^${branchBase.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\.[0-9]+$`,
-    ),
-    new RegExp(
-      `^v${normalizedBase.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\.[0-9]+$`,
-    ),
-  ];
-
-  const matchingTags = tags.filter((tag) =>
-    versionRegexes.some((regex) => regex.test(tag)),
-  );
+  const matchingTags = tags.filter((tag) => {
+    const match = tagMatchesBranchPattern(tag, branchPattern);
+    console.log(`findLatestMatchingTag: checking tag=${tag} match=${match}`);
+    return match;
+  });
 
   matchingTags.sort((a, b) => {
-    const parse = (tag: string) => tag.replace(/^v/, "").split(".").map(Number);
-    const aParts = parse(a);
-    const bParts = parse(b);
+    const aVersion = parseTagVersion(a) ?? { major: 0, minor: 0, patch: 0 };
+    const bVersion = parseTagVersion(b) ?? { major: 0, minor: 0, patch: 0 };
 
-    for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
-      const aValue = aParts[i] ?? 0;
-      const bValue = bParts[i] ?? 0;
-      if (aValue !== bValue) {
-        return bValue - aValue;
-      }
+    if (aVersion.major !== bVersion.major) {
+      return bVersion.major - aVersion.major;
     }
-    return 0;
+    if (aVersion.minor !== bVersion.minor) {
+      return bVersion.minor - aVersion.minor;
+    }
+    return bVersion.patch - aVersion.patch;
   });
 
   return matchingTags[0] ?? null;
