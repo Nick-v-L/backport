@@ -228,16 +228,54 @@ describe("buildBackportComment", () => {
 
     const comment = buildBackportComment(rows as any);
 
-    expect(comment).toContain("Backport action results:");
+    expect(comment).toContain("**⚠️ Some backports failed**");
+    expect(comment).toContain("| Status | Branch | Result | PR |");
     expect(comment).toContain(
-      "| Request | Target branch | Result | Backport branch | PR |",
+      "| ✅ created | v2.2.x | Backport created | [link](https://example.com/pr/123) |",
     );
     expect(comment).toContain(
-      "| backport-to-v2.2.x | v2.2.x | created | backport/v2.2.x/pr-1 | [link](https://example.com/pr/123) |",
+      "| ❌ failed | v3.0.x | ❌ Cherry-pick conflict | - |",
     );
+  });
+
+  it("shows a success header when all backports are created", () => {
+    const rows = [
+      {
+        request: "backport-to-v2.2.x",
+        targetBranch: "v2.2.x",
+        status: "created",
+        branch: "backport/v2.2.x/pr-1",
+        prUrl: "https://example.com/pr/123",
+      },
+    ];
+
+    const comment = buildBackportComment(rows as any);
+
+    expect(comment).toContain("**💚 All backports created successfully**");
     expect(comment).toContain(
-      "| backport-to-v3.0.x | v3.0.x | failed: Cherry-pick conflict | backport/v3.0.x/pr-1 | - |",
+      "| ✅ created | v2.2.x | Backport created | [link](https://example.com/pr/123) |",
     );
+  });
+
+  it("collapses newlines in error messages for markdown table output", () => {
+    const rows = [
+      {
+        request: "backport-to-v1.1.x",
+        targetBranch: "v1.1.x",
+        status: "failed",
+        branch: "backport/v1.1.x/pr-20",
+        prUrl: "",
+        error:
+          "Command failed: git fetch origin backport/v1.1.x\nfatal: couldn't find remote ref backport/v1.1.x",
+      },
+    ];
+
+    const comment = buildBackportComment(rows as any);
+
+    expect(comment).toContain(
+      "| ❌ failed | v1.1.x | ❌ Command failed: git fetch origin backport/v1.1.x fatal: couldn't find remote ref backport/v1.1.x | - |",
+    );
+    expect(comment).not.toContain("\nFatal:");
   });
 });
 
@@ -438,6 +476,31 @@ describe("checkoutBackportBranch", () => {
       "git checkout -b backport/v2.2.x 2.2.3",
       childProcessOptions,
     );
+  });
+
+  it("does not treat an empty git ls-remote result as an existing remote branch", () => {
+    execMock
+      .mockImplementationOnce(() => {
+        throw new Error("branch not found");
+      })
+      .mockReturnValueOnce("")
+      .mockImplementationOnce(() => "2.2.1\n2.2.3\n")
+      .mockImplementationOnce(() => "");
+
+    checkoutBackportBranch("backport/v2.2.x", "2.2.x", "main");
+
+    expect(execMock).toHaveBeenNthCalledWith(
+      2,
+      "git ls-remote --heads origin backport/v2.2.x",
+      {
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
+    expect(execMock).toHaveBeenNthCalledWith(3, "git tag --list", {
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
   });
 });
 

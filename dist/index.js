@@ -33120,8 +33120,8 @@ function localBranchExists(branchName) {
 }
 function remoteBranchExists(branchName) {
     try {
-        runGitCommand(`git ls-remote --heads origin ${branchName}`);
-        return true;
+        const output = runGitCommand(`git ls-remote --heads origin ${branchName}`);
+        return output.trim().length > 0;
     }
     catch {
         return false;
@@ -33285,18 +33285,51 @@ function prepareBackportPrBranch(backportBranch) {
     info(`Creating new backport pull branch ${backportBranch}`);
     runGitCommand(`git checkout -b ${backportBranch}`);
 }
+function sanitizeMarkdownTableCell(value) {
+    return value
+        .replace(/\r?\n+/g, " ")
+        .replace(/\|/g, "\\|")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+function formatStatusBadge(status) {
+    switch (status) {
+        case "created":
+            return "✅ created";
+        case "failed":
+            return "❌ failed";
+        case "already exists":
+            return "⚠️ already exists";
+        default:
+            return `ℹ️ ${sanitizeMarkdownTableCell(status)}`;
+    }
+}
+function buildSummaryHeader(rows) {
+    if (rows.every((row) => row.status === "created")) {
+        return "💚 All backports created successfully";
+    }
+    if (rows.some((row) => row.status === "failed")) {
+        return "⚠️ Some backports failed";
+    }
+    return "⚠️ Backports completed with warnings";
+}
 function buildBackportComment(rows) {
     const header = [
-        "Backport action results:",
+        `**${buildSummaryHeader(rows)}**`,
         "",
-        "| Request | Target branch | Result | Backport branch | PR |",
-        "|---|---|---|---|---|",
+        "| Status | Branch | Result | PR |",
+        "| --- | --- | --- | --- |",
     ];
     const body = rows.map((row) => {
-        const result = row.error ? `${row.status}: ${row.error}` : row.status;
-        const branch = row.branch || "-";
-        const prLink = row.prUrl ? `[link](${row.prUrl})` : "-";
-        return `| ${row.request} | ${row.targetBranch} | ${result} | ${branch} | ${prLink} |`;
+        const status = formatStatusBadge(row.status);
+        const branch = sanitizeMarkdownTableCell(row.targetBranch);
+        const result = row.error
+            ? `❌ ${sanitizeMarkdownTableCell(row.error)}`
+            : "Backport created";
+        const prLink = row.prUrl
+            ? `[link](${sanitizeMarkdownTableCell(row.prUrl)})`
+            : "-";
+        return `| ${status} | ${branch} | ${result} | ${prLink} |`;
     });
     return [...header, ...body].join("\n");
 }
