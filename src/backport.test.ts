@@ -213,14 +213,14 @@ describe("buildBackportComment", () => {
         request: "backport-to-v2.2.x",
         targetBranch: "v2.2.x",
         status: "created",
-        branch: "backport/v2.2.x/pr-1",
+        branch: "backport/v2.2.x-pr-1",
         prUrl: "https://example.com/pr/123",
       },
       {
         request: "backport-to-v3.0.x",
         targetBranch: "v3.0.x",
         status: "failed",
-        branch: "backport/v3.0.x/pr-1",
+        branch: "backport/v3.0.x-pr-1",
         prUrl: "",
         error: "Cherry-pick conflict",
       },
@@ -261,7 +261,7 @@ describe("buildBackportComment", () => {
         request: "backport-to-v1.1.x",
         targetBranch: "v1.1.x",
         status: "failed",
-        branch: "backport/v1.1.x/pr-20",
+        branch: "backport/v1.1.x-pr-20",
         prUrl: "",
         error:
           "Command failed: git fetch origin backport/v1.1.x\nfatal: couldn't find remote ref backport/v1.1.x",
@@ -413,7 +413,7 @@ describe("backport", () => {
       owner: "owner",
       repo: "repo",
       title: "Backport #123 to v2.2.x",
-      head: "backport/v2.2.x/pr-123",
+      head: "backport/v2.2.x-pr-123",
       base: "v2.2.x",
       body: expect.stringContaining(
         "Backport of [#123] from feature-branch into v2.2.x",
@@ -519,30 +519,18 @@ describe("checkoutBackportBranch", () => {
       "No matching tag found for v1.1.x. Cannot create backport/v1.1.x.",
     );
 
-    expect(execMock).toHaveBeenNthCalledWith(
-      3,
-      "git tag --list",
-      {
-        encoding: "utf8",
-        stdio: ["pipe", "pipe", "pipe"],
-      },
-    );
-    expect(execMock).toHaveBeenNthCalledWith(
-      4,
-      "git fetch --tags origin",
-      {
-        encoding: "utf8",
-        stdio: ["pipe", "pipe", "pipe"],
-      },
-    );
-    expect(execMock).toHaveBeenNthCalledWith(
-      5,
-      "git tag --list",
-      {
-        encoding: "utf8",
-        stdio: ["pipe", "pipe", "pipe"],
-      },
-    );
+    expect(execMock).toHaveBeenNthCalledWith(3, "git tag --list", {
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    expect(execMock).toHaveBeenNthCalledWith(4, "git fetch --tags origin", {
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    expect(execMock).toHaveBeenNthCalledWith(5, "git tag --list", {
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
   });
 });
 

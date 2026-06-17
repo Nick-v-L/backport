@@ -603,7 +603,7 @@ export async function backport(
 
     Original PR title: ${prTitle}`;
 
-    const backportPrBranch = `${targetBranchWithPrefix}/pr-${prNumber}`;
+    const backportPrBranch = `${targetBranchWithPrefix}-pr-${prNumber}`;
 
     try {
       checkoutBackportBranch(

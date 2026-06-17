@@ -33450,7 +33450,7 @@ async function backport(inputs, inputPrefix, inputPattern, targetBranchPrefix, p
         const body = `Backport of [#${prNumber}] from ${prHeadBranch} into ${targetBranch}.
 
     Original PR title: ${prTitle}`;
-        const backportPrBranch = `${targetBranchWithPrefix}/pr-${prNumber}`;
+        const backportPrBranch = `${targetBranchWithPrefix}-pr-${prNumber}`;
         try {
             checkoutBackportBranch(targetBranchWithPrefix, targetBranch, prBaseBranch);
             prepareBackportPrBranch(backportPrBranch);
