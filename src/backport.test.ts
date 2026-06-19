@@ -355,6 +355,7 @@ describe("backport", () => {
     (execSync as unknown as vi.Mock).mockImplementation(execMock);
 
     execMock
+      .mockReturnValueOnce("abcdef1234\trefs/heads/v2.2.x\n")
       .mockImplementationOnce(() => {
         throw new Error("branch not found");
       })
@@ -372,11 +373,17 @@ describe("backport", () => {
       .mockReturnValueOnce("")
       .mockReturnValueOnce("")
       .mockReturnValueOnce("")
+      .mockImplementationOnce(() => {
+        throw new Error("commit not found");
+      })
       .mockReturnValueOnce("")
-      .mockReturnValueOnce("\n");
+      .mockReturnValueOnce("");
 
     const gitHubMock = {
       rest: {
+        repos: {
+          getBranch: vi.fn().mockResolvedValue({ data: {} }),
+        },
         pulls: {
           listCommits: vi.fn().mockResolvedValue({
             data: [{ sha: "abc123" }],
