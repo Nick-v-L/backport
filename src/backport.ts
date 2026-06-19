@@ -495,24 +495,6 @@ async function findExistingBackportPullRequest(
   return null;
 }
 
-async function branchExistsOnGitHub(
-  octokit: Octokit,
-  owner: string,
-  repo: string,
-  branch: string,
-): Promise<boolean> {
-  try {
-    await octokit.rest.repos.getBranch({
-      owner,
-      repo,
-      branch,
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function createBackportPullRequest(
   octokit: Octokit,
   owner: string,
@@ -623,22 +605,6 @@ export async function backport(
       continue;
     }
 
-    if (!remoteBranchExists(targetBranch)) {
-      core.error(
-        `Target branch ${targetBranch} does not exist remotely. Cannot create pull request base.`,
-      );
-      results.push({
-        request: inputItem,
-        targetBranch,
-        status: "failed",
-        branch: "",
-        prUrl: "",
-        error: `Target branch ${targetBranch} does not exist remotely. Cannot create pull request base.`,
-      });
-      core.endGroup();
-      continue;
-    }
-
     const targetBranchWithPrefix = `${targetBranchPrefix}${targetBranch}`;
     core.debug(`Backport target branch: ${targetBranchWithPrefix}`);
 
@@ -693,19 +659,6 @@ export async function backport(
         prUrl = existingPr.html_url;
         status = "already exists";
       } else {
-        const targetBranchExists = await branchExistsOnGitHub(
-          octokit,
-          repoOwner,
-          repoName,
-          targetBranch,
-        );
-
-        if (!targetBranchExists) {
-          throw new Error(
-            `Target branch ${targetBranch} does not exist on GitHub. Cannot create pull request.`,
-          );
-        }
-
         prUrl = await createBackportPullRequest(
           octokit,
           repoOwner,

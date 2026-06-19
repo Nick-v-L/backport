@@ -33384,19 +33384,6 @@ async function findExistingBackportPullRequest(octokit, owner, repo, sourceBranc
     }
     return null;
 }
-async function branchExistsOnGitHub(octokit, owner, repo, branch) {
-    try {
-        await octokit.rest.repos.getBranch({
-            owner,
-            repo,
-            branch,
-        });
-        return true;
-    }
-    catch {
-        return false;
-    }
-}
 async function createBackportPullRequest(octokit, owner, repo, sourceBranch, targetBranch, title, body) {
     const response = await octokit.rest.pulls.create({
         owner,
@@ -33462,19 +33449,6 @@ async function backport(inputs, inputPrefix, inputPattern, targetBranchPrefix, p
             endGroup();
             continue;
         }
-        if (!remoteBranchExists(targetBranch)) {
-            error(`Target branch ${targetBranch} does not exist remotely. Cannot create pull request base.`);
-            results.push({
-                request: inputItem,
-                targetBranch,
-                status: "failed",
-                branch: "",
-                prUrl: "",
-                error: `Target branch ${targetBranch} does not exist remotely. Cannot create pull request base.`,
-            });
-            endGroup();
-            continue;
-        }
         const targetBranchWithPrefix = `${targetBranchPrefix}${targetBranch}`;
         debug(`Backport target branch: ${targetBranchWithPrefix}`);
         const title = `Backport #${prNumber} to ${targetBranch}`;
@@ -33501,10 +33475,6 @@ async function backport(inputs, inputPrefix, inputPattern, targetBranchPrefix, p
                 status = "already exists";
             }
             else {
-                const targetBranchExists = await branchExistsOnGitHub(octokit, repoOwner, repoName, targetBranch);
-                if (!targetBranchExists) {
-                    throw new Error(`Target branch ${targetBranch} does not exist on GitHub. Cannot create pull request.`);
-                }
                 prUrl = await createBackportPullRequest(octokit, repoOwner, repoName, backportPrBranch, targetBranch, title, body);
                 info(`Created backport pull request: ${prUrl}`);
                 status = "created";
