@@ -101,6 +101,14 @@ function runGitCommand(command: string): string {
   }).trim();
 }
 
+function configureGitIdentity(): void {
+  runGitCommand('git config --local user.name "github-actions[bot]"');
+
+  runGitCommand(
+    'git config --local user.email "github-actions[bot]@users.noreply.github.com"',
+  );
+}
+
 function localBranchExists(branchName: string): boolean {
   try {
     runGitCommand(`git show-ref --verify --quiet refs/heads/${branchName}`);
@@ -414,6 +422,8 @@ async function commentOnOriginalPullRequest(
 }
 
 function cherryPickCommits(commitShas: string[]): void {
+  configureGitIdentity();
+
   for (const commitSha of commitShas) {
     if (commitAlreadyOnBranch(commitSha)) {
       core.info(
