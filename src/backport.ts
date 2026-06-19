@@ -605,6 +605,22 @@ export async function backport(
       continue;
     }
 
+    if (!remoteBranchExists(targetBranch)) {
+      core.error(
+        `Target branch ${targetBranch} does not exist remotely. Cannot create pull request base.`,
+      );
+      results.push({
+        request: inputItem,
+        targetBranch,
+        status: "failed",
+        branch: "",
+        prUrl: "",
+        error: `Target branch ${targetBranch} does not exist remotely. Cannot create pull request base.`,
+      });
+      core.endGroup();
+      continue;
+    }
+
     const targetBranchWithPrefix = `${targetBranchPrefix}${targetBranch}`;
     core.debug(`Backport target branch: ${targetBranchWithPrefix}`);
 
