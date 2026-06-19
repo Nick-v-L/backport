@@ -33109,6 +33109,10 @@ function runGitCommand(command) {
         stdio: ["pipe", "pipe", "pipe"],
     }).trim();
 }
+function configureGitIdentity() {
+    runGitCommand('git config --local user.name "github-actions[bot]"');
+    runGitCommand('git config --local user.email "github-actions[bot]@users.noreply.github.com"');
+}
 function localBranchExists(branchName) {
     try {
         runGitCommand(`git show-ref --verify --quiet refs/heads/${branchName}`);
@@ -33332,6 +33336,7 @@ async function commentOnOriginalPullRequest(octokit, owner, repo, issueNumber, r
     });
 }
 function cherryPickCommits(commitShas) {
+    configureGitIdentity();
     for (const commitSha of commitShas) {
         if (commitAlreadyOnBranch(commitSha)) {
             info(`Commit ${commitSha} is already present on the target branch. Skipping.`);
