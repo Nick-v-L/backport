@@ -518,6 +518,7 @@ export async function backport(
   prNumber: number,
   prHeadBranch: string,
   prTitle: string,
+  prUrl: string,
   dryRun: boolean,
 ): Promise<void> {
   const octokit = github.getOctokit(githubToken) as unknown as Octokit;
@@ -567,10 +568,8 @@ export async function backport(
       continue;
     }
 
-    const title = `Backport #${prNumber} to ${targetBranch}`;
-    const body = `Backport of [#${prNumber}] from ${prHeadBranch} into ${targetBranch}.
-
-    Original PR title: ${prTitle}`;
+    const title = `[Backport to ${targetBranch}] ${prTitle} (#${prNumber})`;
+    const body = `# Backport<br>Backport of [#${prNumber} - ${prTitle}](${prUrl}) from ${prHeadBranch} into ${targetBranch}.`;
 
     const backportPrBranch = `backport/${targetBranch}/pr-${prNumber}`;
     core.debug(`Backport PR branch name: ${backportPrBranch}`);

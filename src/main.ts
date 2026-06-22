@@ -55,6 +55,7 @@ export async function run(): Promise<void> {
     const prNumber = pullRequest.number;
     const prHeadBranch = pullRequest.head.ref;
     const prTitle = pullRequest.title;
+    const prUrl = pullRequest.html_url as string;
 
     core.startGroup("Pull Request Context");
     core.debug(`PR number: ${prNumber}`);
@@ -65,6 +66,7 @@ export async function run(): Promise<void> {
       (label: { name: string }) => label.name,
     );
     core.debug(`PR labels: ${labels.join(", ")}`);
+    core.debug(`PR URL: ${prUrl}`);
     core.debug(`Full PR payload: ${JSON.stringify(pullRequest, null, 2)}`);
     core.endGroup();
 
@@ -94,6 +96,7 @@ export async function run(): Promise<void> {
       prNumber,
       prHeadBranch,
       prTitle,
+      prUrl,
       dryRun,
     );
   } catch (error) {

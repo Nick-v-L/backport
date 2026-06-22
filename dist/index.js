@@ -33386,7 +33386,7 @@ async function getInputBasedOnMethod(detectionMethod, labels, customInput, githu
             throw new Error(`Unsupported input method: ${detectionMethod}`);
     }
 }
-async function backport(inputs, inputPrefix, inputPattern, githubToken, repoOwner, repoName, prNumber, prHeadBranch, prTitle, dryRun) {
+async function backport(inputs, inputPrefix, inputPattern, githubToken, repoOwner, repoName, prNumber, prHeadBranch, prTitle, prUrl, dryRun) {
     const octokit = getOctokit(githubToken);
     const results = [];
     for (const inputItem of inputs) {
@@ -33424,10 +33424,8 @@ async function backport(inputs, inputPrefix, inputPattern, githubToken, repoOwne
             endGroup();
             continue;
         }
-        const title = `Backport #${prNumber} to ${targetBranch}`;
-        const body = `Backport of [#${prNumber}] from ${prHeadBranch} into ${targetBranch}.
-
-    Original PR title: ${prTitle}`;
+        const title = `[Backport to ${targetBranch}] ${prTitle} (#${prNumber})`;
+        const body = `# Backport<br>Backport of [#${prNumber} - ${prTitle}](${prUrl}) from ${prHeadBranch} into ${targetBranch}.`;
         const backportPrBranch = `backport/${targetBranch}/pr-${prNumber}`;
         debug(`Backport PR branch name: ${backportPrBranch}`);
         try {
@@ -33522,12 +33520,14 @@ async function run() {
         const prNumber = pullRequest.number;
         const prHeadBranch = pullRequest.head.ref;
         const prTitle = pullRequest.title;
+        const prUrl = pullRequest.html_url;
         startGroup("Pull Request Context");
         debug(`PR number: ${prNumber}`);
         debug(`PR title: ${prTitle}`);
         debug(`PR head branch: ${prHeadBranch}`);
         const labels = pullRequest.labels.map((label) => label.name);
         debug(`PR labels: ${labels.join(", ")}`);
+        debug(`PR URL: ${prUrl}`);
         debug(`Full PR payload: ${JSON.stringify(pullRequest, null, 2)}`);
         endGroup();
         if (dryRun) {
@@ -33535,7 +33535,7 @@ async function run() {
         }
         const input = await getInputBasedOnMethod(detectionMethod, labels, customInput, githubToken, repoOwner, repoName, prNumber);
         info(`Input: ${input.join(", ")}`);
-        await backport(input, inputPrefix, inputPattern, githubToken, repoOwner, repoName, prNumber, prHeadBranch, prTitle, dryRun);
+        await backport(input, inputPrefix, inputPattern, githubToken, repoOwner, repoName, prNumber, prHeadBranch, prTitle, prUrl, dryRun);
     }
     catch (error) {
         if (error instanceof Error) {
