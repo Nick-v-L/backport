@@ -33368,6 +33368,7 @@ async function createBackportPullRequest(octokit, owner, repo, sourceBranch, tar
         base: targetBranch,
         body,
         maintainer_can_modify: true,
+        labels: ["backport"],
     });
     return response.data.html_url;
 }
