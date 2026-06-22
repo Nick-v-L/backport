@@ -109,15 +109,6 @@ function configureGitIdentity(): void {
   );
 }
 
-function localBranchExists(branchName: string): boolean {
-  try {
-    runGitCommand(`git show-ref --verify --quiet refs/heads/${branchName}`);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function remoteBranchExists(branchName: string): boolean {
   try {
     const output = runGitCommand(`git ls-remote --heads origin ${branchName}`);
@@ -270,50 +261,31 @@ function commitAlreadyOnBranch(commitSha: string): boolean {
   }
 }
 
-export function checkoutBackportBranch(
-  sourceBranch: string,
-  tagName: string,
-  baseBranch: string,
-): void {
-  if (localBranchExists(sourceBranch)) {
-    core.info(`Checking out existing local backport branch ${sourceBranch}`);
-    runGitCommand(`git checkout ${sourceBranch}`);
-    return;
-  }
-
-  if (remoteBranchExists(sourceBranch)) {
+export function checkoutBackportBranch(targetBranch: string): void {
+  if (remoteBranchExists(targetBranch)) {
     core.info(
-      `Fetching and checking out existing remote backport branch ${sourceBranch}`,
+      `Fetching and checking out existing remote backport branch ${targetBranch}`,
     );
-    runGitCommand(`git fetch origin ${sourceBranch}`);
-    runGitCommand(`git checkout --track origin/${sourceBranch}`);
-    return;
-  }
-
-  const localTag = getLatestTagForBranch(tagName);
-  if (localTag) {
-    core.info(
-      `Creating new backport branch ${sourceBranch} from local tag ${localTag}`,
-    );
-    runGitCommand(`git checkout -b ${sourceBranch} ${localTag}`);
+    runGitCommand(`git fetch origin ${targetBranch}`);
+    runGitCommand(`git checkout --track origin/${targetBranch}`);
     return;
   }
 
   core.info(
-    `Fetching tags from origin to look for a matching tag for ${tagName}`,
+    `Fetching tags from origin to look for a matching tag for ${targetBranch}`,
   );
   runGitCommand(`git fetch --tags origin`);
-  const fetchedTag = getLatestTagForBranch(tagName);
+  const fetchedTag = getLatestTagForBranch(targetBranch);
   if (fetchedTag) {
     core.info(
-      `Creating new backport branch ${sourceBranch} from fetched tag ${fetchedTag}`,
+      `Creating new backport branch ${targetBranch} from fetched tag ${fetchedTag}`,
     );
-    runGitCommand(`git checkout -b ${sourceBranch} ${fetchedTag}`);
+    runGitCommand(`git checkout -b ${targetBranch} ${fetchedTag}`);
     return;
   }
 
   throw new Error(
-    `No matching tag found for ${tagName}. Cannot create ${sourceBranch}.`,
+    `No matching tag found for ${targetBranch}. Cannot create ${targetBranch}.`,
   );
 }
 
@@ -327,14 +299,6 @@ type BackportResult = {
 };
 
 export function prepareBackportPrBranch(backportBranch: string): void {
-  if (localBranchExists(backportBranch)) {
-    core.info(
-      `Checking out existing local backport pull branch ${backportBranch}`,
-    );
-    runGitCommand(`git checkout ${backportBranch}`);
-    return;
-  }
-
   if (remoteBranchExists(backportBranch)) {
     core.info(
       `Fetching and checking out existing remote backport pull branch ${backportBranch}`,
@@ -548,8 +512,6 @@ export async function backport(
   inputs: string[],
   inputPrefix: string,
   inputPattern: string[],
-  targetBranchPrefix: string,
-  prBaseBranch: string,
   githubToken: string,
   repoOwner: string,
   repoName: string,
@@ -605,22 +567,20 @@ export async function backport(
       continue;
     }
 
-    const targetBranchWithPrefix = `${targetBranchPrefix}${targetBranch}`;
-    core.debug(`Backport target branch: ${targetBranchWithPrefix}`);
-
     const title = `Backport #${prNumber} to ${targetBranch}`;
     const body = `Backport of [#${prNumber}] from ${prHeadBranch} into ${targetBranch}.
 
     Original PR title: ${prTitle}`;
 
-    const backportPrBranch = `${targetBranchWithPrefix}-pr-${prNumber}`;
+    const backportPrBranch = `backport/${targetBranch}/pr-${prNumber}`;
+    core.debug(`Backport PR branch name: ${backportPrBranch}`);
 
     try {
-      checkoutBackportBranch(
-        targetBranchWithPrefix,
-        targetBranch,
-        prBaseBranch,
-      );
+      checkoutBackportBranch(targetBranch);
+
+      core.info(`Pushing target branch ${targetBranch} to origin`);
+      runGitCommand(`git push --set-upstream origin ${targetBranch}`);
+
       prepareBackportPrBranch(backportPrBranch);
 
       const commitShas = await getPullRequestCommitShas(
@@ -638,7 +598,7 @@ export async function backport(
 
       cherryPickCommits(commitShas);
 
-      core.info(`Pushing backport branch ${backportPrBranch} to origin`);
+      core.info(`Pushing backport PR branch ${backportPrBranch} to origin`);
       runGitCommand(`git push --set-upstream origin ${backportPrBranch}`);
 
       const existingPr = await findExistingBackportPullRequest(

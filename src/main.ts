@@ -20,7 +20,6 @@ export async function run(): Promise<void> {
       .map((branch) => branch.trim());
     const inputPrefix = core.getInput("input-prefix");
     const customInput = core.getInput("custom-input");
-    const targetBranchPrefix = core.getInput("target-branch-prefix");
     const dryRun = core.getBooleanInput("dry-run");
 
     core.startGroup("Action Inputs");
@@ -28,7 +27,6 @@ export async function run(): Promise<void> {
     core.debug(`Input pattern: ${inputPattern.join(", ")}`);
     core.debug(`Input prefix: ${inputPrefix}`);
     core.debug(`Custom input: ${customInput}`);
-    core.debug(`Branch prefix: ${targetBranchPrefix}`);
     core.debug(`GitHub token provided: ${Boolean(githubToken)}`);
     core.debug(`Dry run: ${dryRun}`);
     core.endGroup();
@@ -55,15 +53,12 @@ export async function run(): Promise<void> {
     const repoOwner = github.context.repo.owner;
     const repoName = github.context.repo.repo;
     const prNumber = pullRequest.number;
-    const prBaseBranch = pullRequest.base.ref;
     const prHeadBranch = pullRequest.head.ref;
     const prTitle = pullRequest.title;
-    const prUrl = pullRequest.html_url;
 
     core.startGroup("Pull Request Context");
     core.debug(`PR number: ${prNumber}`);
     core.debug(`PR title: ${prTitle}`);
-    core.debug(`PR base branch: ${prBaseBranch}`);
     core.debug(`PR head branch: ${prHeadBranch}`);
 
     const labels: string[] = pullRequest.labels.map(
@@ -93,8 +88,6 @@ export async function run(): Promise<void> {
       input,
       inputPrefix,
       inputPattern,
-      targetBranchPrefix,
-      prBaseBranch,
       githubToken,
       repoOwner,
       repoName,

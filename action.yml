@@ -21,10 +21,10 @@ inputs:
     description: "Prefix for input values."
     required: false
 
-  target-branch-prefix:
-    description: "Prefix for the backport source branch."
-    default: "backport/"
-    required: false
+  # pr-branch-prefix:
+  #   description: "Prefix for the backport source branch."
+  #   default: "backport/"
+  #   required: false
 
   custom-input:
     description: "Custom input for backporting branches."

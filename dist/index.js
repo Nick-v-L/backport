@@ -33113,15 +33113,6 @@ function configureGitIdentity() {
     runGitCommand('git config --local user.name "github-actions[bot]"');
     runGitCommand('git config --local user.email "github-actions[bot]@users.noreply.github.com"');
 }
-function localBranchExists(branchName) {
-    try {
-        runGitCommand(`git show-ref --verify --quiet refs/heads/${branchName}`);
-        return true;
-    }
-    catch {
-        return false;
-    }
-}
 function remoteBranchExists(branchName) {
     try {
         const output = runGitCommand(`git ls-remote --heads origin ${branchName}`);
@@ -33235,40 +33226,24 @@ function commitAlreadyOnBranch(commitSha) {
         return false;
     }
 }
-function checkoutBackportBranch(sourceBranch, tagName, baseBranch) {
-    if (localBranchExists(sourceBranch)) {
-        info(`Checking out existing local backport branch ${sourceBranch}`);
-        runGitCommand(`git checkout ${sourceBranch}`);
+function checkoutBackportBranch(targetBranch) {
+    if (remoteBranchExists(targetBranch)) {
+        info(`Fetching and checking out existing remote backport branch ${targetBranch}`);
+        runGitCommand(`git fetch origin ${targetBranch}`);
+        runGitCommand(`git checkout --track origin/${targetBranch}`);
         return;
     }
-    if (remoteBranchExists(sourceBranch)) {
-        info(`Fetching and checking out existing remote backport branch ${sourceBranch}`);
-        runGitCommand(`git fetch origin ${sourceBranch}`);
-        runGitCommand(`git checkout --track origin/${sourceBranch}`);
-        return;
-    }
-    const localTag = getLatestTagForBranch(tagName);
-    if (localTag) {
-        info(`Creating new backport branch ${sourceBranch} from local tag ${localTag}`);
-        runGitCommand(`git checkout -b ${sourceBranch} ${localTag}`);
-        return;
-    }
-    info(`Fetching tags from origin to look for a matching tag for ${tagName}`);
+    info(`Fetching tags from origin to look for a matching tag for ${targetBranch}`);
     runGitCommand(`git fetch --tags origin`);
-    const fetchedTag = getLatestTagForBranch(tagName);
+    const fetchedTag = getLatestTagForBranch(targetBranch);
     if (fetchedTag) {
-        info(`Creating new backport branch ${sourceBranch} from fetched tag ${fetchedTag}`);
-        runGitCommand(`git checkout -b ${sourceBranch} ${fetchedTag}`);
+        info(`Creating new backport branch ${targetBranch} from fetched tag ${fetchedTag}`);
+        runGitCommand(`git checkout -b ${targetBranch} ${fetchedTag}`);
         return;
     }
-    throw new Error(`No matching tag found for ${tagName}. Cannot create ${sourceBranch}.`);
+    throw new Error(`No matching tag found for ${targetBranch}. Cannot create ${targetBranch}.`);
 }
 function prepareBackportPrBranch(backportBranch) {
-    if (localBranchExists(backportBranch)) {
-        info(`Checking out existing local backport pull branch ${backportBranch}`);
-        runGitCommand(`git checkout ${backportBranch}`);
-        return;
-    }
     if (remoteBranchExists(backportBranch)) {
         info(`Fetching and checking out existing remote backport pull branch ${backportBranch}`);
         runGitCommand(`git fetch origin ${backportBranch}`);
@@ -33411,7 +33386,7 @@ async function getInputBasedOnMethod(detectionMethod, labels, customInput, githu
             throw new Error(`Unsupported input method: ${detectionMethod}`);
     }
 }
-async function backport(inputs, inputPrefix, inputPattern, targetBranchPrefix, prBaseBranch, githubToken, repoOwner, repoName, prNumber, prHeadBranch, prTitle, dryRun) {
+async function backport(inputs, inputPrefix, inputPattern, githubToken, repoOwner, repoName, prNumber, prHeadBranch, prTitle, dryRun) {
     const octokit = getOctokit(githubToken);
     const results = [];
     for (const inputItem of inputs) {
@@ -33449,22 +33424,23 @@ async function backport(inputs, inputPrefix, inputPattern, targetBranchPrefix, p
             endGroup();
             continue;
         }
-        const targetBranchWithPrefix = `${targetBranchPrefix}${targetBranch}`;
-        debug(`Backport target branch: ${targetBranchWithPrefix}`);
         const title = `Backport #${prNumber} to ${targetBranch}`;
         const body = `Backport of [#${prNumber}] from ${prHeadBranch} into ${targetBranch}.
 
     Original PR title: ${prTitle}`;
-        const backportPrBranch = `${targetBranchWithPrefix}-pr-${prNumber}`;
+        const backportPrBranch = `backport/${targetBranch}/pr-${prNumber}`;
+        debug(`Backport PR branch name: ${backportPrBranch}`);
         try {
-            checkoutBackportBranch(targetBranchWithPrefix, targetBranch, prBaseBranch);
+            checkoutBackportBranch(targetBranch);
+            info(`Pushing target branch ${targetBranch} to origin`);
+            runGitCommand(`git push --set-upstream origin ${targetBranch}`);
             prepareBackportPrBranch(backportPrBranch);
             const commitShas = await getPullRequestCommitShas(octokit, repoOwner, repoName, prNumber);
             if (commitShas.length === 0) {
                 throw new Error(`Pull request #${prNumber} contains no commits. Cannot backport.`);
             }
             cherryPickCommits(commitShas);
-            info(`Pushing backport branch ${backportPrBranch} to origin`);
+            info(`Pushing backport PR branch ${backportPrBranch} to origin`);
             runGitCommand(`git push --set-upstream origin ${backportPrBranch}`);
             const existingPr = await findExistingBackportPullRequest(octokit, repoOwner, repoName, backportPrBranch, targetBranch);
             let prUrl;
@@ -33522,14 +33498,12 @@ async function run() {
             .map((branch) => branch.trim());
         const inputPrefix = getInput("input-prefix");
         const customInput = getInput("custom-input");
-        const targetBranchPrefix = getInput("target-branch-prefix");
         const dryRun = getBooleanInput("dry-run");
         startGroup("Action Inputs");
         debug(`Input method: ${detectionMethod}`);
         debug(`Input pattern: ${inputPattern.join(", ")}`);
         debug(`Input prefix: ${inputPrefix}`);
         debug(`Custom input: ${customInput}`);
-        debug(`Branch prefix: ${targetBranchPrefix}`);
         debug(`GitHub token provided: ${Boolean(githubToken)}`);
         debug(`Dry run: ${dryRun}`);
         endGroup();
@@ -33546,14 +33520,11 @@ async function run() {
         const repoOwner = context.repo.owner;
         const repoName = context.repo.repo;
         const prNumber = pullRequest.number;
-        const prBaseBranch = pullRequest.base.ref;
         const prHeadBranch = pullRequest.head.ref;
         const prTitle = pullRequest.title;
-        const prUrl = pullRequest.html_url;
         startGroup("Pull Request Context");
         debug(`PR number: ${prNumber}`);
         debug(`PR title: ${prTitle}`);
-        debug(`PR base branch: ${prBaseBranch}`);
         debug(`PR head branch: ${prHeadBranch}`);
         const labels = pullRequest.labels.map((label) => label.name);
         debug(`PR labels: ${labels.join(", ")}`);
@@ -33564,7 +33535,7 @@ async function run() {
         }
         const input = await getInputBasedOnMethod(detectionMethod, labels, customInput, githubToken, repoOwner, repoName, prNumber);
         info(`Input: ${input.join(", ")}`);
-        await backport(input, inputPrefix, inputPattern, targetBranchPrefix, prBaseBranch, githubToken, repoOwner, repoName, prNumber, prHeadBranch, prTitle, dryRun);
+        await backport(input, inputPrefix, inputPattern, githubToken, repoOwner, repoName, prNumber, prHeadBranch, prTitle, dryRun);
     }
     catch (error) {
         if (error instanceof Error) {
