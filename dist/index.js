@@ -33439,7 +33439,7 @@ Backport of [#${prNumber} - ${prTitle}](${prUrl}) from ${prHeadBranch} into ${ta
             });
         }
         catch (error$1) {
-            const message = error$1 instanceof Error ? error$1.message : String(error$1);
+            const message = (error$1 instanceof Error ? error$1.message : String(error$1)).split(":")[0];
             error(`Backport failed for ${inputItem}: ${message}`);
             results.push({
                 request: inputItem,

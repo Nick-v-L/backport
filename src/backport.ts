@@ -644,7 +644,9 @@ Backport of [#${prNumber} - ${prTitle}](${prUrl}) from ${prHeadBranch} into ${ta
         prShield: `https://img.shields.io/github/pulls/detail/state/${repoOwner}/${repoName}/${newPrNumber}?label=backport%20to%20${encodeURIComponent(targetBranch)}`,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = (
+        error instanceof Error ? error.message : String(error)
+      ).split(":")[0];
       core.error(`Backport failed for ${inputItem}: ${message}`);
       results.push({
         request: inputItem,
