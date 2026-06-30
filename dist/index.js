@@ -28026,27 +28026,6 @@ function getInput(name, options) {
     const val = process.env[`INPUT_${name.replace(/ /g, '_').toUpperCase()}`] || '';
     return val.trim();
 }
-/**
- * Gets the input value of the boolean type in the YAML 1.2 "core schema" specification.
- * Support boolean input list: `true | True | TRUE | false | False | FALSE` .
- * The return value is also in boolean type.
- * ref: https://yaml.org/spec/1.2/spec.html#id2804923
- *
- * @param     name     name of the input to get
- * @param     options  optional. See InputOptions.
- * @returns   boolean
- */
-function getBooleanInput(name, options) {
-    const trueValue = ['true', 'True', 'TRUE'];
-    const falseValue = ['false', 'False', 'FALSE'];
-    const val = getInput(name);
-    if (trueValue.includes(val))
-        return true;
-    if (falseValue.includes(val))
-        return false;
-    throw new TypeError(`Input does not meet YAML 1.2 "Core Schema" specification: ${name}\n` +
-        `Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
-}
 //-----------------------------------------------------------------------
 // Results
 //-----------------------------------------------------------------------
@@ -28081,14 +28060,6 @@ function error(message, properties = {}) {
  */
 function warning(message, properties = {}) {
     issueCommand('warning', toCommandProperties(properties), message instanceof Error ? message.toString() : message);
-}
-/**
- * Adds a notice issue
- * @param message notice issue message. Errors will be converted to string via toString()
- * @param properties optional properties to add to the annotation.
- */
-function notice(message, properties = {}) {
-    issueCommand('notice', toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
 /**
  * Writes info to log with console.log.
@@ -33294,10 +33265,10 @@ function buildBackportComment(rows) {
         const result = row.error
             ? `❌ ${sanitizeMarkdownTableCell(row.error)}`
             : "Backport created";
-        const prLink = row.prUrl
-            ? `[link](${sanitizeMarkdownTableCell(row.prUrl)})`
+        const prShield = row.prShield
+            ? `[<img src="${row.prShield}">](${sanitizeMarkdownTableCell(row.prUrl)})`
             : "-";
-        return `| ${status} | ${branch} | ${result} | ${prLink} |`;
+        return `| ${status} | ${branch} | ${result} | ${prShield} |`;
     });
     return [...header, ...body].join("\n");
 }
@@ -33370,7 +33341,7 @@ async function createBackportPullRequest(octokit, owner, repo, sourceBranch, tar
         maintainer_can_modify: true,
         labels: ["backport"],
     });
-    return response.data.html_url;
+    return response.data.number;
 }
 async function getInputBasedOnMethod(detectionMethod, labels, customInput, githubToken, repoOwner, repoName, prNumber) {
     switch (detectionMethod) {
@@ -33387,7 +33358,7 @@ async function getInputBasedOnMethod(detectionMethod, labels, customInput, githu
             throw new Error(`Unsupported input method: ${detectionMethod}`);
     }
 }
-async function backport(inputs, inputPrefix, inputPattern, githubToken, repoOwner, repoName, prNumber, prHeadBranch, prTitle, prUrl, dryRun) {
+async function backport(inputs, inputPrefix, inputPattern, githubToken, repoOwner, repoName, prNumber, prHeadBranch, prTitle, prUrl) {
     const octokit = getOctokit(githubToken);
     const results = [];
     for (const inputItem of inputs) {
@@ -33401,6 +33372,7 @@ async function backport(inputs, inputPrefix, inputPattern, githubToken, repoOwne
                 status: "skipped",
                 branch: "",
                 prUrl: "",
+                prShield: "",
                 error: `Invalid prefix; expected ${inputPrefix}`,
             });
             endGroup();
@@ -33420,13 +33392,16 @@ async function backport(inputs, inputPrefix, inputPattern, githubToken, repoOwne
                 status: "skipped",
                 branch: "",
                 prUrl: "",
+                prShield: "",
                 error: "Target branch does not match valid backport patterns",
             });
             endGroup();
             continue;
         }
         const title = `[Backport to ${targetBranch}] ${prTitle} (#${prNumber})`;
-        const body = `# Backport<br>Backport of [#${prNumber} - ${prTitle}](${prUrl}) from ${prHeadBranch} into ${targetBranch}.`;
+        const body = `# Backport
+    
+Backport of [#${prNumber} - ${prTitle}](${prUrl}) from ${prHeadBranch} into ${targetBranch}.`;
         const backportPrBranch = `backport/${targetBranch}/pr-${prNumber}`;
         debug(`Backport PR branch name: ${backportPrBranch}`);
         try {
@@ -33442,16 +33417,16 @@ async function backport(inputs, inputPrefix, inputPattern, githubToken, repoOwne
             info(`Pushing backport PR branch ${backportPrBranch} to origin`);
             runGitCommand(`git push --set-upstream origin ${backportPrBranch}`);
             const existingPr = await findExistingBackportPullRequest(octokit, repoOwner, repoName, backportPrBranch, targetBranch);
-            let prUrl;
+            let newPrNumber;
             let status;
             if (existingPr) {
                 info(`Backport pull request already exists: ${existingPr.html_url}`);
-                prUrl = existingPr.html_url;
+                newPrNumber = existingPr.number;
                 status = "already exists";
             }
             else {
-                prUrl = await createBackportPullRequest(octokit, repoOwner, repoName, backportPrBranch, targetBranch, title, body);
-                info(`Created backport pull request: ${prUrl}`);
+                newPrNumber = await createBackportPullRequest(octokit, repoOwner, repoName, backportPrBranch, targetBranch, title, body);
+                info(`Created backport pull request for ${targetBranch}`);
                 status = "created";
             }
             results.push({
@@ -33459,7 +33434,8 @@ async function backport(inputs, inputPrefix, inputPattern, githubToken, repoOwne
                 targetBranch,
                 status,
                 branch: backportPrBranch,
-                prUrl,
+                prUrl: `https://github.com/${repoOwner}/${repoName}/pull/${newPrNumber}`,
+                prShield: `https://img.shields.io/github/pulls/detail/state/${repoOwner}/${repoName}/${newPrNumber}?label=backport%20to%20${encodeURIComponent(targetBranch)}`,
             });
         }
         catch (error$1) {
@@ -33471,6 +33447,7 @@ async function backport(inputs, inputPrefix, inputPattern, githubToken, repoOwne
                 status: "failed",
                 branch: backportPrBranch,
                 prUrl: "",
+                prShield: "",
                 error: message,
             });
         }
@@ -33497,14 +33474,12 @@ async function run() {
             .map((branch) => branch.trim());
         const inputPrefix = getInput("input-prefix");
         const customInput = getInput("custom-input");
-        const dryRun = getBooleanInput("dry-run");
         startGroup("Action Inputs");
         debug(`Input method: ${detectionMethod}`);
         debug(`Input pattern: ${inputPattern.join(", ")}`);
         debug(`Input prefix: ${inputPrefix}`);
         debug(`Custom input: ${customInput}`);
         debug(`GitHub token provided: ${Boolean(githubToken)}`);
-        debug(`Dry run: ${dryRun}`);
         endGroup();
         if (!["label", "comment", "custom"].includes(detectionMethod)) {
             throw new Error(`Invalid detection method: ${detectionMethod}. Valid options are: label, comment, custom.`);
@@ -33531,12 +33506,9 @@ async function run() {
         debug(`PR URL: ${prUrl}`);
         debug(`Full PR payload: ${JSON.stringify(pullRequest, null, 2)}`);
         endGroup();
-        if (dryRun) {
-            notice(`Dry run mode enabled. No actual backports will be created.`);
-        }
         const input = await getInputBasedOnMethod(detectionMethod, labels, customInput, githubToken, repoOwner, repoName, prNumber);
         info(`Input: ${input.join(", ")}`);
-        await backport(input, inputPrefix, inputPattern, githubToken, repoOwner, repoName, prNumber, prHeadBranch, prTitle, prUrl, dryRun);
+        await backport(input, inputPrefix, inputPattern, githubToken, repoOwner, repoName, prNumber, prHeadBranch, prTitle, prUrl);
     }
     catch (error) {
         if (error instanceof Error) {

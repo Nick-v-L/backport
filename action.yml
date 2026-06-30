@@ -30,11 +30,6 @@ inputs:
     description: "Custom input for backporting branches."
     required: false
 
-  dry-run:
-    description: "If true, only log intended backport actions without performing them."
-    default: "false"
-    required: false
-
 runs:
   using: node24
   main: dist/index.js

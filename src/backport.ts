@@ -295,6 +295,7 @@ type BackportResult = {
   status: string;
   branch: string;
   prUrl: string;
+  prShield: string;
   error?: string;
 };
 
@@ -359,11 +360,11 @@ export function buildBackportComment(rows: BackportResult[]): string {
     const result = row.error
       ? `❌ ${sanitizeMarkdownTableCell(row.error)}`
       : "Backport created";
-    const prLink = row.prUrl
-      ? `[link](${sanitizeMarkdownTableCell(row.prUrl)})`
+    const prShield = row.prShield
+      ? `[<img src="${row.prShield}">](${sanitizeMarkdownTableCell(row.prUrl)})`
       : "-";
 
-    return `| ${status} | ${branch} | ${result} | ${prLink} |`;
+    return `| ${status} | ${branch} | ${result} | ${prShield} |`;
   });
 
   return [...header, ...body].join("\n");
@@ -467,7 +468,7 @@ async function createBackportPullRequest(
   targetBranch: string,
   title: string,
   body: string,
-): Promise<string> {
+): Promise<number> {
   const response = await octokit.rest.pulls.create({
     owner,
     repo,
@@ -478,8 +479,7 @@ async function createBackportPullRequest(
     maintainer_can_modify: true,
     labels: ["backport"],
   });
-
-  return response.data.html_url;
+  return response.data.number;
 }
 
 export async function getInputBasedOnMethod(
@@ -520,7 +520,6 @@ export async function backport(
   prHeadBranch: string,
   prTitle: string,
   prUrl: string,
-  dryRun: boolean,
 ): Promise<void> {
   const octokit = github.getOctokit(githubToken) as unknown as Octokit;
   const results: BackportResult[] = [];
@@ -539,6 +538,7 @@ export async function backport(
         status: "skipped",
         branch: "",
         prUrl: "",
+        prShield: "",
         error: `Invalid prefix; expected ${inputPrefix}`,
       });
       core.endGroup();
@@ -563,6 +563,7 @@ export async function backport(
         status: "skipped",
         branch: "",
         prUrl: "",
+        prShield: "",
         error: "Target branch does not match valid backport patterns",
       });
       core.endGroup();
@@ -570,7 +571,9 @@ export async function backport(
     }
 
     const title = `[Backport to ${targetBranch}] ${prTitle} (#${prNumber})`;
-    const body = `# Backport<br>Backport of [#${prNumber} - ${prTitle}](${prUrl}) from ${prHeadBranch} into ${targetBranch}.`;
+    const body = `# Backport
+    
+Backport of [#${prNumber} - ${prTitle}](${prUrl}) from ${prHeadBranch} into ${targetBranch}.`;
 
     const backportPrBranch = `backport/${targetBranch}/pr-${prNumber}`;
     core.debug(`Backport PR branch name: ${backportPrBranch}`);
@@ -609,17 +612,17 @@ export async function backport(
         targetBranch,
       );
 
-      let prUrl: string;
+      let newPrNumber: number;
       let status: string;
 
       if (existingPr) {
         core.info(
           `Backport pull request already exists: ${existingPr.html_url}`,
         );
-        prUrl = existingPr.html_url;
+        newPrNumber = existingPr.number;
         status = "already exists";
       } else {
-        prUrl = await createBackportPullRequest(
+        newPrNumber = await createBackportPullRequest(
           octokit,
           repoOwner,
           repoName,
@@ -628,7 +631,7 @@ export async function backport(
           title,
           body,
         );
-        core.info(`Created backport pull request: ${prUrl}`);
+        core.info(`Created backport pull request for ${targetBranch}`);
         status = "created";
       }
 
@@ -637,7 +640,8 @@ export async function backport(
         targetBranch,
         status,
         branch: backportPrBranch,
-        prUrl,
+        prUrl: `https://github.com/${repoOwner}/${repoName}/pull/${newPrNumber}`,
+        prShield: `https://img.shields.io/github/pulls/detail/state/${repoOwner}/${repoName}/${newPrNumber}?label=backport%20to%20${encodeURIComponent(targetBranch)}`,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -648,6 +652,7 @@ export async function backport(
         status: "failed",
         branch: backportPrBranch,
         prUrl: "",
+        prShield: "",
         error: message,
       });
     } finally {

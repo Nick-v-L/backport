@@ -26,7 +26,6 @@ The action can match tags that include the same semantic version with optional p
 - `input-prefix`: Prefix required for detected inputs. Example: `backport-to-`.
 - `target-branch-prefix`: Prefix for the source branch created for the backport. Default: `backport/`.
 - `custom-input`: Custom backport target input when `detection-method` is `custom`.
-- `dry-run`: When `true`, only logs intended backports without creating them.
 
 ## Example tags
 

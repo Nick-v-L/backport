@@ -20,7 +20,6 @@ export async function run(): Promise<void> {
       .map((branch) => branch.trim());
     const inputPrefix = core.getInput("input-prefix");
     const customInput = core.getInput("custom-input");
-    const dryRun = core.getBooleanInput("dry-run");
 
     core.startGroup("Action Inputs");
     core.debug(`Input method: ${detectionMethod}`);
@@ -28,7 +27,6 @@ export async function run(): Promise<void> {
     core.debug(`Input prefix: ${inputPrefix}`);
     core.debug(`Custom input: ${customInput}`);
     core.debug(`GitHub token provided: ${Boolean(githubToken)}`);
-    core.debug(`Dry run: ${dryRun}`);
     core.endGroup();
 
     if (!["label", "comment", "custom"].includes(detectionMethod)) {
@@ -70,10 +68,6 @@ export async function run(): Promise<void> {
     core.debug(`Full PR payload: ${JSON.stringify(pullRequest, null, 2)}`);
     core.endGroup();
 
-    if (dryRun) {
-      core.notice(`Dry run mode enabled. No actual backports will be created.`);
-    }
-
     const input = await getInputBasedOnMethod(
       detectionMethod,
       labels,
@@ -97,7 +91,6 @@ export async function run(): Promise<void> {
       prHeadBranch,
       prTitle,
       prUrl,
-      dryRun,
     );
   } catch (error) {
     if (error instanceof Error) {
